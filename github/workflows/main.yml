@@ -1,0 +1,102 @@
+name: Deploy via SSH
+
+on:
+  push:
+    branches:
+      - main
+  schedule:
+    - cron: "30 4 2 1 *" 
+
+   # 1. 30 → Minuto (30 minutos após o início da hora)
+   # 2. 4 → Hora em UTC (4h UTC, que é 1h no horário de Brasília)
+   # 3. 2 → Dia do mês (2º dia do mês)
+   # 4. 1 → Mês (1º mês, janeiro)
+   # 5. * → Qualquer dia da semana (sem restrição de dia específico)
+
+jobs:
+  notify-and-schedule:
+    name: Notify and Schedule
+    runs-on: ubuntu-latest
+
+    steps:
+      # Enviar notificação de agendamento
+      - name: Notify Scheduled Deploy to Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_MESSAGE: |
+            Deploy agendado com sucesso. 🚀
+            Repositório: `${{ github.repository }}`
+            Branch: `${{ github.ref_name }}`
+            Commit: `${{ github.sha }}`
+            Mensagem do Commit: "${{ github.event.head_commit.message }}"
+
+      # Enviar notificação de agendamento
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.EMAIL_HOST }}
+          server_port: ${{ secrets.EMAIL_PORT }}
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Deploy agendado com sucesso!"
+          body: |
+            Deploy programado.
+            Repositório: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Mensagem do Commit: "${{ github.event.head_commit.message }}"
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_USERNAME }}
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+
+    steps:
+      # Checkout do código
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Conexão via SSH e execução de comandos
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v0.1.0
+        with:
+          host: ${{ secrets.HOST }}
+          username: ${{ secrets.USER }}
+          password: ${{ secrets.PASS }}
+          port: ${{ secrets.PORT }}
+          script: |
+            cd /caminho/do/seu/projeto   # Substitua pelo caminho do seu projeto
+            git pull origin main
+
+      # Notificar no Slack após o deploy
+      - name: Notify Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_MESSAGE: |
+            Deploy realizado com sucesso no horário programado! 🚀
+            Repositório: `${{ github.repository }}`
+            Branch: `${{ github.ref_name }}`
+            Commit: `${{ github.sha }}`
+            Mensagem do Commit: "${{ github.event.head_commit.message }}"
+
+      # Enviar notificação por e-mail após o deploy
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.EMAIL_HOST }}
+          server_port: ${{ secrets.EMAIL_PORT }}
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Deploy realizado com sucesso!"
+          body: |
+            Deploy concluído com sucesso no horário agendado!
+            Repositório: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+            Mensagem do Commit: "${{ github.event.head_commit.message }}"
+          to: ${{ secrets.EMAIL_TO }}
+          from: ${{ secrets.EMAIL_USERNAME }}
